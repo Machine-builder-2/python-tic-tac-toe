@@ -75,8 +75,6 @@ while server_running:
         if len(waiting_clients) < 2:
             break
 
-        # INDEX OUT OF RANGE ERROR
-
         player_1 = waiting_clients.pop(0)
         player_2 = waiting_clients.pop(0)
 
@@ -135,6 +133,8 @@ while server_running:
         print(f"Client disconnected {client[1][0]}:{client[1][1]}")
     
     for game,reason in end_games:
+        print('end game')
+
         game.send_to_players(system, Event(reason))
 
         for client in game.player_clients:
