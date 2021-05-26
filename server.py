@@ -1,5 +1,7 @@
 from SmartSocket import connections
 import random
+import time
+
 
 Event = connections.BasicEvent
 
@@ -17,6 +19,8 @@ class Game(object):
         self.player_clients = [None, None]
         self.player_turn = 1
         self.board = [[0,0,0],[0,0,0],[0,0,0]]
+
+        self.timeout = 0
     
     def set_players(self, player_1, player_2):
         self.player_clients[0] = player_1
@@ -38,6 +42,9 @@ class Game(object):
             self.player_turn = 2
         else: 
             self.player_turn = 1
+    
+    def reset_timeout(self):
+        self.timeout = time.time()+25
 
 
 running_games = []
@@ -62,14 +69,22 @@ while server_running:
     for new_client in new_clients:
         conn, addr = new_client
         system.send_to_conn(conn, Event('waiting'))
-        if len(waiting_clients) == 0:
-            waiting_clients.append(new_client)
-        elif len(waiting_clients) == 1:
-            new_game = Game()
-            new_game.set_players(waiting_clients.pop(0),
-                                 new_client)
-            running_games.append(new_game)
-            new_game.send_to_players(system, Event('joined'))
+        waiting_clients.append(new_client)
+    
+    while 1:
+        if len(waiting_clients) < 2:
+            break
+
+        # INDEX OUT OF RANGE ERROR
+
+        player_1 = waiting_clients.pop(0)
+        player_2 = waiting_clients.pop(0)
+
+        new_game = Game()
+        new_game.set_players(player_1, player_2)
+        running_games.append(new_game)
+        new_game.send_to_players(system, Event('joined'))
+        new_game.reset_timeout()
 
     for msg in new_messages:
 
@@ -83,9 +98,7 @@ while server_running:
             found_game = find_game_with_player(from_c)
             
             try:
-
                 if found_game is not None:
-                    
                     if msg_o.is_i('click_tile'):
                         coord = msg_o.get('coord')
                         if coord is not None:
@@ -99,13 +112,34 @@ while server_running:
                                     Event('update_board', coord=coord, value=player_index))
                                     found_game.swap_turn()
                                     print(f"move made, it is now player {found_game.player_turn}'s turn")
+                                    new_game.reset_timeout()
             
             except:
-
                 print("ERROR")
 
         else:
             print(f"New message: is_dict:{msg.is_dict}, is_pickled:{msg.is_pickled}")
 
+    current_time = time.time()
+    end_games = []
+    for game in running_games:
+        if current_time > game.timeout:
+            end_games.append((game, "timeout"),)
+
     for client in disconnected:
+        conn = client[0]
+        in_game = find_game_with_player(conn)
+        if in_game is not None:
+            end_games.append((in_game, 'disconnect'),)
+
         print(f"Client disconnected {client[1][0]}:{client[1][1]}")
+    
+    for game,reason in end_games:
+        game.send_to_players(system, Event(reason))
+
+        for client in game.player_clients:
+            if client in system.clients:
+                if not client in waiting_clients:
+                    waiting_clients.append(client)
+        
+        running_games.remove(game)
