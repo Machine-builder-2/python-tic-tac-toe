@@ -52,7 +52,7 @@ running_games = []
 def find_game_with_player(player_conn):
     found_game = None
     for game in running_games:
-        if game.is_conn_part_of(from_c):
+        if game.is_conn_part_of(player_conn):
             found_game = game
             break
     return found_game
